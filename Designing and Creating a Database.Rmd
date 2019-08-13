@@ -5,7 +5,7 @@ jupyter:
       extension: .Rmd
       format_name: rmarkdown
       format_version: '1.1'
-      jupytext_version: 1.2.1
+      jupytext_version: 1.1.3
   kernelspec:
     display_name: Python 3
     language: python
@@ -16,6 +16,370 @@ jupyter:
 
 This is the guided proyect for the Intermediate SQL section of DataQuest. 
 
-```{python}
 
+## Importing and Analysing Data in Pandas
+
+```{python}
+# Importing libraries
+import pandas as pd
+import numpy as np
+import sqlite3
+import csv
+```
+
+```{python}
+# Additional pandas configuration for working with big datasets
+pd.set_option('max_columns', 180)
+pd.set_option('max_rows', 200000)
+pd.set_option('max_colwidth', 5000)
+```
+
+```{python}
+# !ls data
+```
+
+```{python}
+# Rading the four files in which the information is contained
+
+game_log = pd.read_csv('./data/game_log.csv', low_memory = False)
+park_codes = pd.read_csv('./data/park_codes.csv')
+person_codes = pd.read_csv('./data/person_codes.csv')
+team_codes = pd.read_csv('./data/team_codes.csv')
+
+```
+
+```{python}
+# Inspecting game_log
+# There are 172 000 games
+# Each game have the date, number of games, players, teams and locations. 
+# Scores, umpires, awards and attendance are also included
+
+print('shape: ', game_log.shape)
+game_log.head()
+```
+
+```{python}
+# Games range from 1871 to 2016
+game_log['date'].value_counts().sort_index()
+```
+
+```{python}
+# Inspecting parK_codes
+# The matching attribute with game_log could be park_id
+# There are 252 stadiums, each with a unique park_id key
+print('shape: ', park_codes.shape)
+park_codes.head()
+```
+
+```{python}
+# Inspecting person code
+# The connection with game_log are the several attributes that contains a player id
+# There are 20494 players registered, each with the debut as player, manager, coach or umpire. 
+print('shape: ', person_codes.shape)
+person_codes.head()
+```
+
+```{python}
+# Inspecting team code
+# The connection with game_log is the team_id attribute
+# There are 150 registered teams with the nickname, range of activity and city they belong to.
+print('shape: ', team_codes.shape)
+team_codes.head()
+```
+
+```{python}
+# Inspecting the franch_id attribute (team_codes)
+
+print(team_codes['franch_id'].value_counts().head())
+
+# Some teams have several franch_id
+
+print('-'*5)
+
+only_bs1 = team_codes['franch_id'] == 'BS1'
+
+# The braves have always the same nickname and the same franch_id
+# They have different id's, changing the location
+# The sequence also shows the pathway of 'evolution'
+print(team_codes[only_bs1])
+
+print('-'*5)
+
+# Still, nicknames and franch_id have not the same number of values (not a 1 to 1 correspondence)
+# This indicates tht they might be teams with the same name but different location and franchise
+print(team_codes['franch_id'].unique().shape[0])
+print(team_codes['nickname'].unique().shape[0])
+```
+
+```{python}
+# To analyze the 'def pos' of the series, unique values are inspected
+game_log['v_player_1_def_pos'].value_counts().sort_index()
+game_log['v_player_4_def_pos'].value_counts().sort_index()
+
+# The values goes from one to 10. Each position from 1 to 9 correspond to a position in the field
+# 1.Pitcher
+# 2.Catcher
+# 3.1st Base
+# 4.2nd Base
+# 5.3rd Base
+# 6.Shortstop
+# 7.Left Field
+# 8.Center Field
+# 9.Right Field
+
+# The 10th value is not defined
+```
+
+## Saving the dataframes to a db with pandas and sqlite3
+
+```{python}
+# Creating helper functions to interact with the sqlite3 library
+
+db = 'mlb.db'
+
+def run_query(q):
+    with sqlite3.connect(db) as conn:
+        return pd.read_sql(q, conn)
+
+def run_command(c):
+    with sqlite3.connect(db) as conn:
+        conn.isolation_level = None
+        conn.execute(c)
+        
+def show_tables():
+    q = '''
+    select name, type
+    from sqlite_master
+    where type = "table"  or type = "view";
+    '''
+    
+    return run_query(q)
+```
+
+```{python}
+# Creating a table for each current data frame
+
+tables = {
+    'game_log': game_log,
+    'person_codes': person_codes,
+    'team_codes': team_codes,
+    'park_codes': park_codes
+}
+
+with sqlite3.connect(db) as conn:
+    # Deconstruct each name in "name" and the data in "info"
+    for name, info in tables.items():
+        # Delete the table if it already exist on the db
+        conn.execute('drop table if exists {}'.format(name))
+        # Run the to_sql funciton on each dataset
+        # The index = False ensures that the df index is not created as a new column on the sql table
+        info.to_sql(name, conn, index = False)
+
+```
+
+```{python}
+# Creating a new column on the game_log table to make the id
+
+run_command('''
+ALTER TABLE game_log
+ADD COLUMN game_id text
+''')
+
+```
+
+```{python}
+# Update the values of game_id to match the patter hometeam, year, month, day and number of game
+
+run_command('''
+UPDATE game_log
+SET game_id = h_name || date || number_of_game
+WHERE game_id IS NULL;
+''')
+
+run_query('''
+select * 
+from game_log
+limit 10
+''')
+```
+
+<!-- #region -->
+## P3 and P4
+
+
+## Normalization Opportunities and Defining a new Schema
+
+The current tables can be reorginized using normal forms.
+
+- We can eliminate all the debut dates and instead use the game_log data to calculate this value.
+- The same can be done with the start, end and sequence attributes of the team_codes table.
+- The start and end years of the park_code table can also be reproducible with the data on the game_log table.
+- In the game_log table, there are rows in wich the name and the id of the player appear. The name can be obtained with the id, so we can eliminates the names on the game_log table
+
+In regard to the schema reorganization, we could create a new table for specifing the position the player had in an specific game and if he played like a normal player, a manager or a coach, and the defensive and ofensive position it had. This table would be connected to the team table and the person table (for more specific details on the name). 
+
+The team table would be connected to the specific league the team is part of. 
+
+The game table would only have specific details for the game itself, and contain a foreign key related to a table of the game that specificates any statistics for the game and to the park table to know more details about where the game was played.
+
+<!-- #endregion -->
+
+## Creating tables of the new Schema that don't have foreign keys
+
+To create the tables of the new schema, it's necessary to **start with the tables that don't have foreign keys**
+
+
+```{python}
+show_tables()
+```
+
+```{python}
+run_query('''
+select *
+from person_codes
+limit 10
+''')
+```
+
+```{python}
+# Creating the new person, park and league tables
+
+# Notice the use of "if not exist" for avoiding creating a new table when it already exists
+
+run_command('''
+    create table if not exists person(  
+    person_id text,
+    first_name text,
+    last_name text
+    )
+''')
+
+run_command('''
+    create table if not exists park(
+        park_id text,
+        name text,
+        nickname text,
+        city text,
+        state text,
+        notes text
+    )
+''')
+
+run_command('''
+    create table if not exists league(
+        league_id text,
+        league_name text
+    )
+''')
+
+
+show_tables()
+```
+
+```{python}
+# Inserting the values into the person, park an league tables
+
+# Notice the use of "insert or ignore" to prevent adding again the same rows
+
+run_command('''
+    insert or ignore into person
+    select id, first, last from person_codes
+''')
+
+run_command('''
+    insert or ignore into park
+    select park_id, name, aka, city, state, notes from park_codes
+''')
+    
+run_command('''
+    insert or ignore into league
+    values
+        ("NL", "National League"),
+        ("AL", "American League"),
+        ("AA", "American Association"),
+        ("FL", "Federal League"),
+        ("PL", "Players League"),
+        ("UA", "Union Association")
+''')
+
+
+print(run_query('''
+    select *
+    from person
+    limit 5
+'''))
+
+print(run_query('''
+    select *
+    from park
+    limit 5
+'''))
+
+print(run_query('''
+    select *
+    from league
+    limit 5
+'''))
+```
+
+```{python}
+# Reading the appearance_type from a csv
+
+# droping the table appereance_type if it already exists
+
+run_command('''
+    drop table if exists appearance_type;
+''')
+
+# load the data to a df
+
+appearance_type = pd.read_csv('./data/appearance_type.csv')
+
+# Create first the table to avoid creating it and them having to create an additional table 
+
+run_command('''
+create table appearance_type(
+    appearance_type_id text,
+    name text,
+    category text
+)
+''')
+
+# Load the df to the db
+# Notice the "if_exists = 'append'" 
+
+with sqlite3.connect(db) as conn:
+    appearance_type.to_sql('appearance_type',
+                          conn,
+                          index = False,
+                          if_exists = 'append')
+
+run_query('''
+    select *
+    from appearance_type
+    limit 15
+''')
+```
+
+## Creating tables with foreign references 
+
+```{python}
+run_query('''
+    select * from team_codes limit 10
+''')
+```
+
+```{python}
+# Redefining the run_command function to ensure foreign key constraints on sql
+
+def run_command(c):
+    with sqlite3.connect(db) as conn:
+        conn.execute('PRAGMA foreign_keys = ON;')
+        conn.isolation_level = None
+        conn.execute(c)
+
+```
+
+```{python}
+# Creating the tables for the team and game
 ```
