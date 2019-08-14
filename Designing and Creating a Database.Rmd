@@ -166,15 +166,23 @@ tables = {
     'park_codes': park_codes
 }
 
-with sqlite3.connect(db) as conn:
-    # Deconstruct each name in "name" and the data in "info"
-    for name, info in tables.items():
-        # Delete the table if it already exist on the db
-        conn.execute('drop table if exists {}'.format(name))
-        # Run the to_sql funciton on each dataset
-        # The index = False ensures that the df index is not created as a new column on the sql table
-        info.to_sql(name, conn, index = False)
+# Add a try except conditional to avoid creating the tables when they already exist
 
+try:
+    run_query('''
+    select * from game_log limit 5
+    ''')
+except:
+    with sqlite3.connect(db) as conn:
+        # Deconstruct each name in "name" and the data in "info"
+        for name, info in tables.items():
+            # Delete the table if it already exist on the db
+            conn.execute('drop table if exists {}'.format(name))
+            # Run the to_sql funciton on each dataset
+            # The index = False ensures that the df index is not created as a new column on the sql table
+            info.to_sql(name, conn, index = False)
+
+show_tables()
 ```
 
 ```{python}
@@ -230,25 +238,13 @@ To create the tables of the new schema, it's necessary to **start with the table
 
 
 ```{python}
-show_tables()
-```
-
-```{python}
-run_query('''
-select *
-from person_codes
-limit 10
-''')
-```
-
-```{python}
 # Creating the new person, park and league tables
 
 # Notice the use of "if not exist" for avoiding creating a new table when it already exists
 
 run_command('''
     create table if not exists person(  
-    person_id text,
+    person_id text primary key,
     first_name text,
     last_name text
     )
@@ -256,7 +252,7 @@ run_command('''
 
 run_command('''
     create table if not exists park(
-        park_id text,
+        park_id text primary key,
         name text,
         nickname text,
         city text,
@@ -267,7 +263,7 @@ run_command('''
 
 run_command('''
     create table if not exists league(
-        league_id text,
+        league_id text primary key,
         league_name text
     )
 ''')
@@ -283,12 +279,12 @@ show_tables()
 
 run_command('''
     insert or ignore into person
-    select id, first, last from person_codes
+    select id, first, last from person_codes;
 ''')
 
 run_command('''
     insert or ignore into park
-    select park_id, name, aka, city, state, notes from park_codes
+    select park_id, name, aka, city, state, notes from park_codes;
 ''')
     
 run_command('''
@@ -299,7 +295,7 @@ run_command('''
         ("AA", "American Association"),
         ("FL", "Federal League"),
         ("PL", "Players League"),
-        ("UA", "Union Association")
+        ("UA", "Union Association");
 ''')
 
 
@@ -364,12 +360,6 @@ run_query('''
 ## Creating tables with foreign references 
 
 ```{python}
-run_query('''
-    select * from team_codes limit 10
-''')
-```
-
-```{python}
 # Redefining the run_command function to ensure foreign key constraints on sql
 
 def run_command(c):
@@ -382,4 +372,92 @@ def run_command(c):
 
 ```{python}
 # Creating the tables for the team and game
+
+run_command('''
+create table if not exists team(
+    team_id text primary key,
+    league_id text,
+    city text,
+    nickname text,
+    franch_id text,
+    foreign key (league_id) references league(league_id)
+)
+''')
+
+run_command('''
+create table if not exists game(
+    game_id text primary key,
+    date text,
+    number_of_game integer,
+    park_id text,
+    length_outs integer,
+    day integer,
+    completion text,
+    forfeit text,
+    protest text,
+    attendance integer,
+    length_minutes integer,
+    additional_info text,
+    acquisition_info text,
+    foreign key (park_id) references park(park_id)
+)
+''')
+
+
+show_tables()
+```
+
+```{python}
+run_query('''
+select * from game_log limit 5
+''')
+```
+
+```{python}
+# Inserting values into team and game
+
+run_command('''
+    insert or ignore into team
+    select team_id, league, city, nickname, franch_id from team_codes;
+''')
+
+run_command('''
+    insert or ignore into game
+    select 
+        game_id,
+        date,
+        number_of_game,
+        park_id,
+        length_outs,
+        case
+            when day_night = "D" then 1
+            when day_night = "N" then 0
+            else null
+            end as day,
+        completion,
+        forefeit,
+        protest,
+        attendance,
+        length_minutes,
+        additional_info,
+        acquisition_info
+        from game_log
+''')
+
+```
+
+```{python}
+# Checking the insertion of values
+
+print(run_query('''
+    select *
+    from team
+    limit 5
+'''))
+
+
+print(run_query('''
+    select * from game limit 5
+'''))
+
 ```
