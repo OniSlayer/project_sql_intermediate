@@ -335,7 +335,7 @@ appearance_type = pd.read_csv('./data/appearance_type.csv')
 
 run_command('''
 create table appearance_type(
-    appearance_type_id text,
+    appearance_type_id text primary key,
     name text,
     category text
 )
@@ -618,5 +618,240 @@ select * from team_appearance limit 50
 ```
 
 ```{python}
+# Creating the person_appearance table
 
+run_command('''
+create table if not exists person_appearance(
+    appearance_id integer primary key,
+    person_id text,
+    team_id text,
+    game_id text,
+    appearance_type_id text,
+    foreign key (person_id) references person(person_id),
+    foreign key (team_id) references team(team_id),
+    foreign key (game_id) references game(game_id),
+    foreign key (appearance_type_id) references appearance_type(appearance_type_id)
+)
+
+''')
+
+print(show_tables())
+```
+
+```{python}
+# Inserting values into the person_appearance table
+
+# First insert every value that is not a player itself (i.e umpires, managers, awards and pitchers)
+# Notice that in this case, there are arguments being passed to the insert clause.
+# This is because we are not passing all the data points of the row (the first one, the key,
+# is not being passed so SQL generate it automatically)
+
+
+run_command('''
+INSERT OR IGNORE INTO person_appearance (
+    game_id,
+    team_id,
+    person_id,
+    appearance_type_id
+)
+
+/* Selecting only hp umpires rows */
+SELECT
+    game_id,
+    NULL,
+    hp_umpire_id,
+    "UHP"
+FROM game_log
+WHERE hp_umpire_id IS NOT NULL    
+    
+    union
+
+/* Selecting only first base umpires rows */
+select game_id, NULL, [1b_umpire_id], "U1B"
+from game_log
+where [1b_umpire_id] not null
+
+union
+
+/* Selecting only second base umpires rows */
+select game_id, NULL, [2b_umpire_id], "U2B"
+from game_log
+where [2b_umpire_id] not null
+
+union
+
+/* Selecting only third base umpires rows */
+select game_id, NULL, [3b_umpire_id], "U3B"
+from game_log
+where [3b_umpire_id] not null
+
+union
+
+/* Selecting only left field umpires rows */
+select game_id, NULL, lf_umpire_id, "ULF"
+from game_log
+where lf_umpire_id not null
+
+union
+
+/* Selecting only right field umpires rows */
+select game_id, NULL, rf_umpire_id, "URF"
+from game_log
+where rf_umpire_id not null
+
+union
+
+/* Selecting only visitor managers rows */
+select game_id, v_name, v_manager_id, "MM"
+from game_log
+where v_manager_id not null
+
+union
+
+/* Selecting only home managers rows */
+select game_id, h_name, h_manager_id, "MM"
+from game_log
+where h_manager_id not null
+
+union
+
+/* Selecting only winning pitchers rows */
+select 
+    game_id,
+    case 
+        when h_score > v_score then h_name
+        else v_name
+        end as team_id,
+    winning_pitcher_id, 
+    "AWP"
+from game_log
+where winning_pitcher_id is not null
+
+union
+
+/* Selecting only losing pitchers rows */
+select 
+    game_id,
+    case 
+        when h_score > v_score then v_name
+        else h_name
+        end as team_id,
+    losing_pitcher_id, 
+    "ALP"
+from game_log
+where losing_pitcher_id is not null
+
+union
+
+/* Selecting only saving pitchers rows */
+select 
+    game_id,
+    case 
+        when h_score > v_score then h_name
+        else v_name
+        end as team_id,
+    saving_pitcher_id, 
+    "ASP"
+from game_log
+where saving_pitcher_id is not null
+
+union
+
+/* Selecting only winning rbi batters rows */
+select 
+    game_id,
+    case 
+        when h_score > v_score then h_name
+        else v_name
+        end as team_id,
+    winning_rbi_batter_id, 
+    "AWB"
+from game_log
+where winning_rbi_batter_id is not null
+
+
+union
+
+/* Selecting only visitor starting pitcher rows */
+select 
+    game_id,
+    v_name,
+    v_starting_pitcher_id, 
+    "PSP"
+from game_log
+where v_starting_pitcher_id is not null
+
+union
+
+/* Selecting only home starting pitcher rows */
+select 
+    game_id,
+    h_name,
+    h_starting_pitcher_id, 
+    "PSP"
+from game_log
+where h_starting_pitcher_id is not null;
+''')
+
+
+
+
+run_query('''
+select *
+from person_appearance
+limit 15
+''')
+```
+
+```{python}
+# Inserting the values of each of the players
+
+template = '''
+insert or ignore into person_appearance(
+    game_id,
+    team_id,
+    person_id,
+    appearance_type_id
+)
+
+select 
+    game_id,
+    {homevisitor}_name,
+    {homevisitor}_player_{number}_id,
+    "O{number}"
+from game_log
+where {homevisitor}_player_{number}_id is not null
+
+union
+
+select 
+    game_id,
+    {homevisitor}_name,
+    {homevisitor}_player_{number}_id,
+    "D" || CAST({homevisitor}_player_{number}_def_pos as int)
+from game_log
+where {homevisitor}_player_{number}_id is not null
+'''
+
+for homevisitor in ['h', 'v']:
+    for number in range(1,10):
+        query_vars = {
+            'homevisitor': homevisitor,
+            'number': number
+        }
+        run_command(template.format(**query_vars))
+        
+
+```
+
+```{python}
+run_query('''
+select count(distinct game_id) from person_appearance
+''')
+```
+
+```{python}
+run_query('''
+select count(game_id) from game
+''')
 ```
