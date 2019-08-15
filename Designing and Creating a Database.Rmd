@@ -188,27 +188,32 @@ show_tables()
 ```{python}
 # Creating a new column on the game_log table to make the id
 
-run_command('''
-ALTER TABLE game_log
-ADD COLUMN game_id text
-''')
+try:
+    run_query('''
+        select game_id
+        from game_log
+        limit 5
+    ''')
+except:
+    run_command('''
+    ALTER TABLE game_log
+    ADD COLUMN game_id text
+    ''')
+    
+    # Update the values of game_id to match the patter hometeam, year, month, day and number of game
 
-```
-
-```{python}
-# Update the values of game_id to match the patter hometeam, year, month, day and number of game
-
-run_command('''
-UPDATE game_log
-SET game_id = h_name || date || number_of_game
-WHERE game_id IS NULL;
-''')
+    run_command('''
+    UPDATE game_log
+    SET game_id = h_name || date || number_of_game
+    WHERE game_id IS NULL;
+    ''')
 
 run_query('''
 select * 
 from game_log
 limit 10
 ''')
+
 ```
 
 <!-- #region -->
@@ -460,22 +465,6 @@ print(run_query('''
     select * from game limit 5
 '''))
 
-```
-
-```{python}
-run_query('''
-select sql from sqlite_master
-where name = "game_log"
-and type = "table"
-''')
-```
-
-```{python}
-run_query('''
-select *
-from game_log
-limit 5
-''')
 ```
 
 ```{python}
@@ -845,13 +834,47 @@ for homevisitor in ['h', 'v']:
 ```
 
 ```{python}
+# Checking that both tables have the same number of game_id's
+print(
 run_query('''
 select count(distinct game_id) from person_appearance
+''')
+)
+
+print(
+run_query('''
+select count(game_id) from game
+''')
+)
+```
+
+## Droping initial tables
+
+```{python}
+# The four first initial tables that were used to insert values into the new schema
+# can be deleted now
+
+run_command('''
+    drop table game_log
+''')
+
+run_command('''
+    drop table person_codes
+''')
+
+run_command('''
+    drop table team_codes
+''')
+
+run_command('''
+    drop table park_codes
 ''')
 ```
 
 ```{python}
 run_query('''
-select count(game_id) from game
+    select *
+    from game
+    limit 15
 ''')
 ```
